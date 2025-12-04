@@ -20,12 +20,13 @@ windows = { version = "0.52", features = [
 ] }
 
 [profile.release]
-# Optimize for small binary size while maintaining security
-opt-level = "z"           # Optimize for size
+# Aggressive size optimization
+opt-level = "z"           # Optimize aggressively for size
 lto = true                # Enable Link Time Optimization
-codegen-units = 1         # Reduce code generation units for better optimization
+codegen-units = 1         # Single codegen unit for best optimization
 strip = true              # Strip symbols from binary
-panic = "abort"           # Smaller panic implementation
+panic = "abort"           # Smaller panic implementation (no unwinding)
+overflow-checks = false   # Disable overflow checks in release
 
 [profile.dev]
 # Development profile with full debug info
