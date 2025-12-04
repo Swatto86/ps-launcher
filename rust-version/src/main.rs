@@ -21,7 +21,7 @@
 //! 5. Implements proper error handling throughout
 //! 6. No shell expansion - direct process creation
 
-// Console subsystem required for Command::spawn() to work properly
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::env;
 use std::path::PathBuf;
@@ -268,6 +268,8 @@ fn execute_powershell(
     script_path: &str,
     params: &[String],
 ) -> std::result::Result<i32, String> {
+    use std::os::windows::process::CommandExt;
+
     let mut cmd = Command::new(powershell_path);
 
     // PowerShell security flags
@@ -283,19 +285,19 @@ fn execute_powershell(
         cmd.arg(param);
     }
 
-    // Execute and capture output for debugging
-    match cmd.output() {
-        Ok(output) => {
-            let exit_code = output.status.code().unwrap_or(1);
+    // Hide the PowerShell console window
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
 
-            // If there was an error, show stderr
-            if exit_code != 0 && !output.stderr.is_empty() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                return Err(format!("PowerShell error (exit {}): {}", exit_code, stderr));
-            }
-
-            Ok(exit_code)
-        }
+    // Execute and wait for completion
+    match cmd.spawn() {
+        Ok(mut child) => match child.wait() {
+            Ok(status) => match status.code() {
+                Some(code) => Ok(code),
+                None => Err("Process terminated by signal".to_string()),
+            },
+            Err(e) => Err(format!("Failed to wait for PowerShell: {}", e)),
+        },
         Err(e) => Err(format!(
             "Failed to execute PowerShell: {} (error code: {:?})",
             e,
