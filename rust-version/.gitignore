@@ -1,0 +1,29 @@
+# Rust build artifacts
+/target/
+Cargo.lock
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Windows specific
+Thumbs.db
+Desktop.ini
+
+# Build outputs
+*.exe
+*.pdb
+*.dll
+*.so
+*.dylib
+
+# Test outputs
+*.log
+
+# Backup files
+*.bak
+*.tmp
