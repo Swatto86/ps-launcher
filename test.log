@@ -1,9 +1,0 @@
-﻿Script executed at: 2025-02-10 21:08:07
-Script path: C:\Users\me-sw\ps-launcher\testScript.ps1
-Working directory: C:\Users\me-sw\ps-launcher
-
-Parameters received:
-    FilePath: C:\logs\test.txt
-    FileList: a.txt, b.txt, c.txt
-    Name: Jane Smith
-    Verbose: True

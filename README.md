@@ -1,18 +1,36 @@
 # PS-Launcher
 
-A minimal, secure PowerShell script launcher that produces executables under 15KB without requiring the C Runtime Library.
+A minimal, secure PowerShell script launcher (under 10KB) that runs PowerShell scripts silently without displaying a console window.
 
 ## Overview
 
-PS-Launcher is a lightweight Windows executable that safely launches PowerShell scripts with parameters while implementing security best practices. It's designed for scenarios where you need a small, standalone executable to run PowerShell scripts without exposing command-line complexity to end users.
+PS-Launcher is a lightweight Windows executable designed to run PowerShell scripts **under the current user context** without showing a PowerShell console window. 
+
+### Why PS-Launcher?
+
+When running PowerShell scripts via Task Scheduler, shortcuts, or automation tools, a PowerShell console window typically appears and remains visible during execution. This is distracting for users and unprofessional for automated tasks.
+
+**PS-Launcher solves this by:**
+- Running PowerShell scripts completely hidden (no console window)
+- Executing under the current user's security context (not SYSTEM)
+- Supporting all script parameters and exit codes
+- Maintaining full PowerShell functionality while being invisible to users
+
+This is particularly useful for:
+- Task Scheduler tasks that run while users are logged in
+- Login scripts that map network drives
+- Background automation that shouldn't interrupt users
+- Professional deployments where UI visibility is undesirable
 
 ## Features
 
-- **Ultra-small executable** (~8-15KB) using `/NODEFAULTLIB` optimization
-- **Security-focused** design preventing PATH hijacking and command injection
-- **Parameter passing** support with automatic quoting and validation
-- **Comprehensive error handling** with user-friendly messages
-- **No dependencies** - runs on any Windows system with PowerShell
+- **Silent Execution** - Runs PowerShell scripts without showing any console window (`CREATE_NO_WINDOW` flag)
+- **Current User Context** - Executes scripts with the logged-in user's permissions and environment
+- **Ultra-small executable** (~6KB) using `/NODEFAULTLIB` optimization
+- **Full Parameter Support** - Pass any parameters to scripts with automatic quoting and validation
+- **Exit Code Propagation** - Returns the script's exit code for proper error handling
+- **Security-focused** - Prevents PATH hijacking and command injection
+- **No dependencies** - Runs on any Windows system with PowerShell 5.1+
 
 ## Usage
 
@@ -37,7 +55,7 @@ ps-launcher.exe -Script deploy.ps1 -Environment "Production" -Force
 
 ### Requirements
 
-- Visual Studio 2022 (Community edition or higher)
+- Visual Studio 2022 Build Tools (or any edition)
 - Windows 10/11 or Windows Server 2016+
 
 ### Compilation
@@ -51,11 +69,13 @@ compile.bat
 Or manually:
 
 ```cmd
-call "%ProgramFiles%\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
+call "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
 cl /c /GS- /O1 /Os /GR- ps-launcher.cpp
 link /NODEFAULTLIB /ENTRY:WinMain /SUBSYSTEM:WINDOWS kernel32.lib user32.lib shell32.lib /OUT:ps-launcher.exe ps-launcher.obj
 del *.obj
 ```
+
+**Note:** Adjust the Visual Studio path based on your edition (BuildTools, Community, Professional, or Enterprise).
 
 ### Compiler Flags Explained
 
@@ -118,11 +138,29 @@ The codebase demonstrates several important C programming concepts:
 - **Buffer Management** - Safe string building with overflow protection
 - **Resource Management** - Proper handle cleanup and memory management
 
-## Use Cases
+## Testing
 
-- **Automated Deployment** - Wrap complex PowerShell scripts in simple executables
-- **User-Friendly Tools** - Hide PowerShell complexity from end users
-- **Embedded Systems** - Minimal footprint for resource-constrained environments
+Run the comprehensive test suite to verify all functionality:
+
+```powershell
+.\test.ps1
+```
+
+The test suite validates:
+- Basic parameter passing
+- Scripts with `[CmdletBinding()]`
+- Scripts with `[CmdletBinding(SupportsShouldProcess)]`
+- Mandatory parameters and error handling
+- Exit code propagation
+- Parameters with spaces and special characters
+- `-Verbose`, `-WhatIf`, and other common parameters
+
+## UTask Scheduler** - Run scheduled PowerShell scripts silently without console windows
+- **Login Scripts** - Execute user environment setup (drive mapping, etc.) invisibly at logon
+- **Background Automation** - Run periodic maintenance tasks without disrupting users
+- **Desktop Shortcuts** - Provide users with clickable shortcuts that run scripts silently
+- **Group Policy** - Deploy PowerShell scripts that execute without UI distraction
+- **Professional Deployments** - Automated tasks that should run invisibly to end userents
 - **Security Tools** - Controlled script execution with parameter validation
 - **System Administration** - Package maintenance scripts as standalone tools
 
@@ -142,12 +180,44 @@ The launcher provides detailed error messages for common issues:
 - `1` - Application error (invalid arguments, missing files, etc.)
 - Other - PowerShell script exit code (passed through)
 
+## Script Requirements for Task Scheduler
+
+For scripts using `[CmdletBinding(SupportsShouldProcess)]` to work properly in non-interactive mode (Task Scheduler, services, etc.), they should set `$ConfirmPreference` internally:
+
+```powershell
+[CmdletBinding(SupportsShouldProcess=$true)]
+param()
+
+# Handle non-interactive execution
+if ([Environment]::UserInteractive -eq $false) {
+    $ConfirmPreference = 'None'
+}
+```
+
+**Why?** When PowerShell runs with `-NonInteractive`, scripts with `$PSCmdlet.ShouldProcess()` calls will skip all confirmation prompts by default. Setting `$ConfirmPreference = 'None'` ensures these operations proceed normally.
+
+**Best Practices:**
+1. Scripts without `[CmdletBinding()]` work automatically with ps-launcher
+2. Scripts with `[CmdletBinding()]` (no ShouldProcess) work automatically
+3. Scripts with `[CmdletBinding(SupportsShouldProcess=$true)]` should set `$ConfirmPreference = 'None'` for non-interactive scenarios
+
+## PowerShell Version Compatibility
+
+PS-Launcher uses **Windows PowerShell 5.x** (`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`), not PowerShell 7+.
+
+**Important:** Scripts must be compatible with PowerShell 5.x:
+- Avoid PowerShell 7+ specific features (e.g., `-ProgressAction` common parameter)
+- Test scripts with `powershell.exe` (not `pwsh.exe`) before deployment
+- Use UTF-8 with BOM encoding for best compatibility
+- PowerShell 5.x has stricter parsing - avoid complex string interpolation with pipe characters
+
 ## Limitations
 
 - **Windows Only** - Uses Windows-specific APIs
-- **PowerShell 5.x** - Targets Windows PowerShell (not PowerShell Core)
+- **PowerShell 5.x** - Targets Windows PowerShell (not PowerShell Core/7+)
 - **Fixed Buffer Size** - Command line limited to 520 characters
 - **Basic Parameter Sanitization** - Only checks for semicolons
+- **Script Compatibility** - Scripts must be PowerShell 5.x compatible
 
 ## Contributing
 
