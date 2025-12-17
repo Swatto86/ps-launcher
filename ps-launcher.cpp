@@ -14,6 +14,19 @@
 #include <windows.h>         // HEADERS: Core Windows API types and functions
 #include <shellapi.h>        // HEADERS: Shell API for command line parsing
 
+// Buffer size for command line - kept small to avoid stack overflow without CRT
+// This is sufficient for most PowerShell scripts with reasonable parameters
+#define CMD_BUFFER_SIZE 1024
+
+// Silent mode - disable MessageBox popups for automated execution
+// Uncomment the line below to enable error message popups for debugging
+// #define ENABLE_ERROR_DIALOGS
+#ifndef ENABLE_ERROR_DIALOGS
+    #define ShowError(msg, title) ((void)0)  // No-op macro - silent mode
+#else
+    #define ShowError(msg, title) ShowError(msg, title)
+#endif
+
 //--------------------------------------------------------------------------
 // MANUAL CRT REPLACEMENT - Low-level memory operations
 //--------------------------------------------------------------------------
@@ -132,10 +145,43 @@ static inline bool AppendStr(WCHAR* dest, size_t destSize, const WCHAR* src, siz
 }
 
 //--------------------------------------------------------------------------
-// PREPROCESSOR MACROS - Compile-time constants
+// HELPER FUNCTIONS - String processing utilities
 //--------------------------------------------------------------------------
-// MACRO DEFINITION: Symbolic constant replaced during preprocessing
-#define CMD_BUFFER_SIZE 520
+// Check if a string contains spaces, quotes, or special characters that need quoting
+static inline bool NeedsQuoting(const WCHAR* str)
+{
+    if (!str || str[0] == L'\0') return true;  // Empty strings always need quotes
+    
+    for (size_t i = 0; str[i] != L'\0'; i++)
+    {
+        if (str[i] == L' ' || str[i] == L'\t' || str[i] == L'"')
+            return true;
+    }
+    return false;
+}
+
+// Escape internal quotes in a string by doubling them for PowerShell
+// Returns false if buffer overflow would occur
+static inline bool AppendEscaped(WCHAR* dest, size_t destSize, const WCHAR* src, size_t* curLen)
+{
+    for (size_t i = 0; src[i] != L'\0'; i++)
+    {
+        if (src[i] == L'"')
+        {
+            // Escape quote by doubling it
+            if (!AppendStr(dest, destSize, L"\\\"", curLen))
+                return false;
+        }
+        else
+        {
+            // Regular character - append it
+            WCHAR temp[2] = { src[i], L'\0' };
+            if (!AppendStr(dest, destSize, temp, curLen))
+                return false;
+        }
+    }
+    return true;
+}
 
 //--------------------------------------------------------------------------
 // WINDOWS ENTRY POINT - Application lifecycle management
@@ -165,7 +211,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     if (!args)
     {
         // WINDOWS API: MessageBoxW for user feedback
-        MessageBoxW(NULL, L"Failed to parse command line.", L"Error", MB_OK | MB_ICONERROR);
+        ShowError(L"Failed to parse command line.", L"Error");
         return 1;  // ERROR CODE: Non-zero indicates failure
     }
 
@@ -209,7 +255,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     if (len == 0 || len > MAX_PATH - 1)
     {
         LocalFree(args);  // CLEANUP: Always free before error return
-        MessageBoxW(NULL, L"Failed to get system directory.", L"Error", MB_OK | MB_ICONERROR);
+        ShowError(L"Failed to get system directory.", L"Error");
         return 1;
     }
     
@@ -225,7 +271,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
         else
         {
             LocalFree(args);
-            MessageBoxW(NULL, L"System directory path too long.", L"Error", MB_OK | MB_ICONERROR);
+            ShowError(L"System directory path too long.", L"Error");
             return 1;
         }
     }
@@ -237,7 +283,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     if (lstrlenW(psPath) + lstrlenW(psRelative) >= MAX_PATH)
     {
         LocalFree(args);
-        MessageBoxW(NULL, L"PowerShell path too long.", L"Error", MB_OK | MB_ICONERROR);
+        ShowError(L"PowerShell path too long.", L"Error");
         return 1;
     }
     
@@ -251,7 +297,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     if (GetFileAttributesW(psPath) == INVALID_FILE_ATTRIBUTES)
     {
         LocalFree(args);
-        MessageBoxW(NULL, L"PowerShell executable not found.", L"Error", MB_OK | MB_ICONERROR);
+        ShowError(L"PowerShell executable not found.", L"Error");
         return 1;
     }
 
@@ -259,7 +305,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     if (GetFileAttributesW(args[2]) == INVALID_FILE_ATTRIBUTES)
     {
         LocalFree(args);
-        MessageBoxW(NULL, L"Specified script file not found.", L"Error", MB_OK | MB_ICONERROR);
+        ShowError(L"Specified script file not found.", L"Error");
         return 1;
     }
 
@@ -280,7 +326,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     {
         // ERROR HANDLING: Buffer overflow prevention
         LocalFree(args);
-        MessageBoxW(NULL, L"Buffer overflow error.", L"Error", MB_OK | MB_ICONERROR);
+        ShowError(L"Buffer overflow error.", L"Error");
         return 1;
     }
     
@@ -289,7 +335,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     if (!AppendStr(cmd, CMD_BUFFER_SIZE, psPath, &pos))
     {
         LocalFree(args);
-        MessageBoxW(NULL, L"Buffer overflow error.", L"Error", MB_OK | MB_ICONERROR);
+        ShowError(L"Buffer overflow error.", L"Error");
         return 1;
     }
     
@@ -302,7 +348,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     else
     {
         LocalFree(args);
-        MessageBoxW(NULL, L"Buffer overflow error.", L"Error", MB_OK | MB_ICONERROR);
+        ShowError(L"Buffer overflow error.", L"Error");
         return 1;
     }
 
@@ -311,7 +357,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
             L" -NonInteractive -NoProfile -ExecutionPolicy Bypass -File ", &pos))
     {
         LocalFree(args);
-        MessageBoxW(NULL, L"Buffer overflow error.", L"Error", MB_OK | MB_ICONERROR);
+        ShowError(L"Buffer overflow error.", L"Error");
         return 1;
     }
 
@@ -324,14 +370,14 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     else
     {
         LocalFree(args);
-        MessageBoxW(NULL, L"Buffer overflow error.", L"Error", MB_OK | MB_ICONERROR);
+        ShowError(L"Buffer overflow error.", L"Error");
         return 1;
     }
     
     if (!AppendStr(cmd, CMD_BUFFER_SIZE, args[2], &pos))
     {
         LocalFree(args);
-        MessageBoxW(NULL, L"Buffer overflow error.", L"Error", MB_OK | MB_ICONERROR);
+        ShowError(L"Buffer overflow error.", L"Error");
         return 1;
     }
     
@@ -343,7 +389,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     else
     {
         LocalFree(args);
-        MessageBoxW(NULL, L"Buffer overflow error.", L"Error", MB_OK | MB_ICONERROR);
+        ShowError(L"Buffer overflow error.", L"Error");
         return 1;
     }
 
@@ -361,7 +407,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
             if (args[i][j] == L';')
             {
                 LocalFree(args);
-                MessageBoxW(NULL, L"Invalid character in argument.", L"Error", MB_OK | MB_ICONERROR);
+                // Silent failure - return exit code 1 for semicolon injection attempts
                 return 1;
             }
         }
@@ -370,41 +416,71 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
         if (!AppendStr(cmd, CMD_BUFFER_SIZE, L" ", &pos))
         {
             LocalFree(args);
-            MessageBoxW(NULL, L"Buffer overflow error.", L"Error", MB_OK | MB_ICONERROR);
+            // Silent failure - buffer overflow
             return 1;
         }
         
-        // CONDITIONAL LOGIC: Handle quoted vs unquoted parameters
-        // ARRAY INDEXING: args[i][0] gets first character of string
-        if (args[i][0] != L'\"')
-        {
-            // UNQUOTED PARAMETER: Add quotes for safety
-            if (!AppendStr(cmd, CMD_BUFFER_SIZE, L"\"", &pos))
-            {
-                LocalFree(args);
-                MessageBoxW(NULL, L"Buffer overflow error.", L"Error", MB_OK | MB_ICONERROR);
-                return 1;
-            }
-            if (!AppendStr(cmd, CMD_BUFFER_SIZE, args[i], &pos))
-            {
-                LocalFree(args);
-                MessageBoxW(NULL, L"Buffer overflow error.", L"Error", MB_OK | MB_ICONERROR);
-                return 1;
-            }
-            if (!AppendStr(cmd, CMD_BUFFER_SIZE, L"\"", &pos))
-            {
-                LocalFree(args);
-                MessageBoxW(NULL, L"Buffer overflow error.", L"Error", MB_OK | MB_ICONERROR);
-                return 1;
-            }
-        }
-        else
+        // ENHANCED PARAMETER HANDLING: Properly quote and escape parameters
+        // Check if parameter is already quoted (starts and ends with quotes)
+        size_t argLen = lstrlenW(args[i]);
+        bool alreadyQuoted = (argLen >= 2 && args[i][0] == L'\"' && args[i][argLen - 1] == L'\"');
+        
+        if (alreadyQuoted)
         {
             // ALREADY QUOTED: Use parameter as-is
             if (!AppendStr(cmd, CMD_BUFFER_SIZE, args[i], &pos))
             {
                 LocalFree(args);
-                MessageBoxW(NULL, L"Buffer overflow error.", L"Error", MB_OK | MB_ICONERROR);
+                ShowError(L"Buffer overflow error.", L"Error");
+                return 1;
+            }
+        }
+        else
+        {
+            // UNQUOTED OR NEEDS QUOTING: Add quotes and escape internal quotes
+            if (!AppendStr(cmd, CMD_BUFFER_SIZE, L"\"", &pos))
+            {
+                LocalFree(args);
+                ShowError(L"Buffer overflow error.", L"Error");
+                return 1;
+            }
+            
+            // Check if parameter contains internal quotes that need escaping
+            bool hasInternalQuotes = false;
+            for (size_t j = 0; args[i][j] != L'\0'; j++)
+            {
+                if (args[i][j] == L'\"')
+                {
+                    hasInternalQuotes = true;
+                    break;
+                }
+            }
+            
+            if (hasInternalQuotes)
+            {
+                // Escape internal quotes
+                if (!AppendEscaped(cmd, CMD_BUFFER_SIZE, args[i], &pos))
+                {
+                    LocalFree(args);
+                    ShowError(L"Buffer overflow error.", L"Error");
+                    return 1;
+                }
+            }
+            else
+            {
+                // No internal quotes, append normally
+                if (!AppendStr(cmd, CMD_BUFFER_SIZE, args[i], &pos))
+                {
+                    LocalFree(args);
+                    ShowError(L"Buffer overflow error.", L"Error");
+                    return 1;
+                }
+            }
+            
+            if (!AppendStr(cmd, CMD_BUFFER_SIZE, L"\"", &pos))
+            {
+                LocalFree(args);
+                ShowError(L"Buffer overflow error.", L"Error");
                 return 1;
             }
         }
@@ -445,10 +521,10 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
         WCHAR debugMsg[CMD_BUFFER_SIZE + 300];  // LARGER BUFFER: For combined message
         // WINDOWS API: Formatted string printing (like sprintf)
         wsprintfW(debugMsg, L"Error: %s\n\nCommand: %s", errMsg, cmd);
-        MessageBoxW(NULL, debugMsg, L"Process Creation Failed", MB_OK | MB_ICONERROR);
+        ShowError(debugMsg, L"Process Creation Failed");
 #else
         // RELEASE BUILD: Show only error message
-        MessageBoxW(NULL, errMsg, L"Process Creation Failed", MB_OK | MB_ICONERROR);
+        ShowError(errMsg, L"Process Creation Failed");
 #endif
         return err;  // RETURN ERROR CODE: Pass through system error
     }

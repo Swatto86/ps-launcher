@@ -24,12 +24,19 @@ This is particularly useful for:
 
 ## Features
 
-- **Silent Execution** - Runs PowerShell scripts without showing any console window (`CREATE_NO_WINDOW` flag)
+- **Silent Execution** - Runs PowerShell scripts without showing any console window or error dialogs
 - **Current User Context** - Executes scripts with the logged-in user's permissions and environment
 - **Ultra-small executable** (~6KB) using `/NODEFAULTLIB` optimization
-- **Full Parameter Support** - Pass any parameters to scripts with automatic quoting and validation
+- **Enhanced Parameter Support** - Handles complex parameters including:
+  - Empty strings
+  - Paths with spaces
+  - Negative numbers
+  - Long parameters (up to 1024 characters total command line)
+  - Special characters (@, #, &, %, etc.)
+  - Unicode characters
+  - Internal quotes (automatically escaped)
 - **Exit Code Propagation** - Returns the script's exit code for proper error handling
-- **Security-focused** - Prevents PATH hijacking and command injection
+- **Security-focused** - Blocks semicolons to prevent command injection attacks
 - **No dependencies** - Runs on any Windows system with PowerShell 5.1+
 
 ## Usage
@@ -116,9 +123,22 @@ The executable achieves its minimal size through several techniques:
 ### Memory Management
 
 The application uses stack-allocated buffers and minimal heap allocation:
-- Command line buffer: 520 characters (fixed size)
+- Command line buffer: 1024 characters (fixed size)
 - Path buffers: `MAX_PATH` (260 characters)
 - No dynamic allocation except for command line parsing
+
+### Edge Cases Handled
+
+ps-launcher correctly handles various parameter edge cases:
+
+✅ **Empty strings** - Properly passed as empty parameters  
+✅ **Paths with spaces** - Automatically quoted (e.g., `C:\Program Files\App`)  
+✅ **Negative numbers** - Correctly passed as parameter values (e.g., `-42`)  
+✅ **Long parameters** - Supports up to 1024 character total command line  
+✅ **Special characters** - Handles `@`, `#`, `&`, `%`, etc.  
+✅ **Unicode characters** - Full Unicode support (e.g., `Café`, `™️`)  
+✅ **Internal quotes** - Automatically escaped for PowerShell  
+⛔ **Semicolons** - Blocked for security (command injection prevention)
 
 ### PowerShell Execution
 
@@ -142,6 +162,8 @@ The codebase demonstrates several important C programming concepts:
 
 Run the comprehensive test suite to verify all functionality:
 
+### Main Test Suite
+
 ```powershell
 .\test.ps1
 ```
@@ -155,7 +177,24 @@ The test suite validates:
 - Parameters with spaces and special characters
 - `-Verbose`, `-WhatIf`, and other common parameters
 
-## UTask Scheduler** - Run scheduled PowerShell scripts silently without console windows
+### Edge Case Test Suite
+
+```powershell
+.\comprehensive-edge-test.ps1
+```
+
+Tests advanced edge cases:
+- Empty string parameters
+- Paths with spaces
+- Negative numbers
+- Very long parameters (200+ characters)
+- Semicolon injection blocking
+- Special characters (@, #, &, %, etc.)
+- Unicode characters
+
+## Use Cases
+
+**Task Scheduler** - Run scheduled PowerShell scripts silently without console windows
 - **Login Scripts** - Execute user environment setup (drive mapping, etc.) invisibly at logon
 - **Background Automation** - Run periodic maintenance tasks without disrupting users
 - **Desktop Shortcuts** - Provide users with clickable shortcuts that run scripts silently
