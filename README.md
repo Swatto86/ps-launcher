@@ -22,6 +22,26 @@ This is particularly useful for:
 - Background automation that shouldn't interrupt users
 - Professional deployments where UI visibility is undesirable
 
+### Why Not VBScript?
+
+The traditional approach to hiding PowerShell windows has been to use a VBScript wrapper:
+```vbscript
+Set objShell = CreateObject("WScript.Shell")
+objShell.Run "powershell.exe -File script.ps1", 0, True
+```
+
+**However, Microsoft announced in October 2023 that VBScript is deprecated and will be removed from Windows in the second half of 2027.** This means VBScript-based solutions will stop working on future Windows versions.
+
+**PS-Launcher is the future-proof alternative:**
+- ✅ Native C++ executable - no deprecated runtime dependencies
+- ✅ Works on all current and future Windows versions
+- ✅ Smaller than .NET alternatives (~6KB vs 100KB+)
+- ✅ Zero external dependencies (VBScript required Windows Script Host)
+- ✅ Better security controls and logging than VBScript wrappers
+- ✅ Professional solution suitable for enterprise deployment
+
+While `powershell.exe -WindowStyle Hidden` seems like it should work, it only hides the window *after* PowerShell starts, causing a brief console flash that defeats the purpose for user-facing automation.
+
 ## Features
 
 - **Silent Execution** - Runs PowerShell scripts without showing any console window or error dialogs
