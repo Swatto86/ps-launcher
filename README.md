@@ -37,7 +37,48 @@ This is particularly useful for:
   - Internal quotes (automatically escaped)
 - **Exit Code Propagation** - Returns the script's exit code for proper error handling
 - **Security-focused** - Blocks semicolons to prevent command injection attacks
+- **Comprehensive Logging** - Automatic troubleshooting logs in `%LOCALAPPDATA%\ps-launcher\ps-launcher.log`
 - **No dependencies** - Runs on any Windows system with PowerShell 5.1+
+
+## Logging
+
+ps-launcher automatically creates a comprehensive log file for troubleshooting purposes:
+
+**Log Location:** `%LOCALAPPDATA%\ps-launcher\ps-launcher.log`  
+(e.g., `C:\Users\YourName\AppData\Local\ps-launcher\ps-launcher.log`)
+
+**What's Logged:**
+- Command line parsing results
+- Script file path validation
+- PowerShell executable location
+- Complete command line being executed
+- Parameter processing details
+- Process creation status
+- Script exit codes
+- Any errors encountered
+
+The log file is **overwritten on each run** (not appended), keeping it manageable and focused on the most recent execution.
+
+### Viewing the Log
+
+```powershell
+# Quick view
+Get-Content $env:LOCALAPPDATA\ps-launcher\ps-launcher.log
+
+# Open in Notepad
+notepad $env:LOCALAPPDATA\ps-launcher\ps-launcher.log
+
+# Tail the log during execution
+Get-Content $env:LOCALAPPDATA\ps-launcher\ps-launcher.log -Wait
+```
+
+### Disabling Logging
+
+To disable logging (reduce binary size), edit `ps-launcher.cpp` and comment out:
+```cpp
+// #define ENABLE_LOGGING
+```
+Then recompile with `compile.bat`.
 
 ## Usage
 

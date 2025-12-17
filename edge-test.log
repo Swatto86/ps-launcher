@@ -1,0 +1,7 @@
+﻿=== Edge Case Test Results ===
+EmptyString: '' (Length: 0)
+PathWithSpaces: 'Test™️Café©'
+QuotedValue: ''
+NegativeNumber: 0
+ColonSyntax: ''
+VeryLongParameter: '' (Length: 0)

@@ -13,10 +13,16 @@
 #define WIN32_LEAN_AND_MEAN  // PREPROCESSOR: Reduces Windows header size
 #include <windows.h>         // HEADERS: Core Windows API types and functions
 #include <shellapi.h>        // HEADERS: Shell API for command line parsing
+#include <shlobj.h>          // HEADERS: Shell folder API for AppData path
 
 // Buffer size for command line - kept small to avoid stack overflow without CRT
 // This is sufficient for most PowerShell scripts with reasonable parameters
 #define CMD_BUFFER_SIZE 1024
+#define LOG_BUFFER_SIZE 1024
+
+// Enable comprehensive logging to AppData\Local\ps-launcher\ps-launcher.log
+// Comment out the line below to disable logging
+#define ENABLE_LOGGING
 
 // Silent mode - disable MessageBox popups for automated execution
 // Uncomment the line below to enable error message popups for debugging
@@ -184,6 +190,116 @@ static inline bool AppendEscaped(WCHAR* dest, size_t destSize, const WCHAR* src,
 }
 
 //--------------------------------------------------------------------------
+// LOGGING FUNCTIONS - Comprehensive troubleshooting support
+//--------------------------------------------------------------------------
+#ifdef ENABLE_LOGGING
+
+static HANDLE g_hLogFile = INVALID_HANDLE_VALUE;
+
+// Get log file path in AppData\Local\ps-launcher\ps-launcher.log
+static bool GetLogFilePath(WCHAR* logPath, size_t logPathSize)
+{
+    WCHAR appDataPath[MAX_PATH];
+    
+    // Get user's AppData\Local directory
+    if (SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, appDataPath) != S_OK)
+        return false;
+    
+    // Build path: AppData\Local\ps-launcher\ps-launcher.log
+    size_t pos = 0;
+    if (!AppendStr(logPath, logPathSize, appDataPath, &pos))
+        return false;
+    if (!AppendStr(logPath, logPathSize, L"\\ps-launcher", &pos))
+        return false;
+    
+    // Create directory if it doesn't exist
+    CreateDirectoryW(logPath, NULL);
+    
+    if (!AppendStr(logPath, logPathSize, L"\\ps-launcher.log", &pos))
+        return false;
+    
+    return true;
+}
+
+// Initialize log file (overwrites previous log)
+static void InitLog()
+{
+    WCHAR logPath[MAX_PATH];
+    if (!GetLogFilePath(logPath, MAX_PATH))
+        return;
+    
+    // Create new log file (overwrite existing)
+    g_hLogFile = CreateFileW(logPath, GENERIC_WRITE, FILE_SHARE_READ, NULL, 
+                             CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+}
+
+// Write a line to the log file
+static void LogWrite(const WCHAR* message)
+{
+    if (g_hLogFile == INVALID_HANDLE_VALUE)
+        return;
+    
+    // Convert wide string to UTF-8 for file
+    char utf8Buffer[LOG_BUFFER_SIZE];
+    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, message, -1, utf8Buffer, 
+                                      LOG_BUFFER_SIZE - 2, NULL, NULL);
+    if (utf8Len > 0)
+    {
+        // Add newline
+        utf8Buffer[utf8Len - 1] = '\r';
+        utf8Buffer[utf8Len] = '\n';
+        utf8Buffer[utf8Len + 1] = '\0';
+        
+        DWORD written;
+        WriteFile(g_hLogFile, utf8Buffer, utf8Len + 1, &written, NULL);
+    }
+}
+
+// Log formatted message (simple sprintf replacement)
+static void LogFormat(const WCHAR* format, const WCHAR* arg)
+{
+    WCHAR buffer[LOG_BUFFER_SIZE];
+    size_t pos = 0;
+    
+    // Simple format string processor - only handles one %s
+    for (size_t i = 0; format[i] != L'\0' && pos < LOG_BUFFER_SIZE - 1; i++)
+    {
+        if (format[i] == L'%' && format[i + 1] == L's')
+        {
+            // Insert argument
+            if (arg && !AppendStr(buffer, LOG_BUFFER_SIZE, arg, &pos))
+                break;
+            i++; // Skip the 's'
+        }
+        else
+        {
+            // Regular character
+            buffer[pos++] = format[i];
+            buffer[pos] = L'\0';
+        }
+    }
+    
+    LogWrite(buffer);
+}
+
+// Close log file
+static void CloseLog()
+{
+    if (g_hLogFile != INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(g_hLogFile);
+        g_hLogFile = INVALID_HANDLE_VALUE;
+    }
+}
+
+#else
+    #define InitLog() ((void)0)
+    #define LogWrite(msg) ((void)0)
+    #define LogFormat(fmt, arg) ((void)0)
+    #define CloseLog() ((void)0)
+#endif
+
+//--------------------------------------------------------------------------
 // WINDOWS ENTRY POINT - Application lifecycle management
 //--------------------------------------------------------------------------
 // CALLING CONVENTION: WINAPI expands to __stdcall on Windows
@@ -196,6 +312,12 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     UNREFERENCED_PARAMETER(hPrev);
     UNREFERENCED_PARAMETER(lpCmdLine);
     UNREFERENCED_PARAMETER(nCmdShow);
+
+    // Initialize logging
+    InitLog();
+    LogWrite(L"========================================");
+    LogWrite(L"PS-Launcher Execution Log");
+    LogWrite(L"========================================");
 
     //----------------------------------------------------------------------
     // COMMAND LINE PARSING - Dynamic memory allocation
@@ -210,10 +332,14 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     // ERROR HANDLING: Check for allocation failure
     if (!args)
     {
+        LogWrite(L"ERROR: Failed to parse command line");
+        CloseLog();
         // WINDOWS API: MessageBoxW for user feedback
         ShowError(L"Failed to parse command line.", L"Error");
         return 1;  // ERROR CODE: Non-zero indicates failure
     }
+    
+    LogWrite(L"Command line parsed successfully");
 
     //----------------------------------------------------------------------
     // INPUT VALIDATION - Defensive programming
@@ -222,6 +348,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     // STRING COMPARISON: Case-insensitive wide string comparison
     if (argc < 3 || lstrcmpiW(args[1], L"-Script") != 0)
     {
+        LogWrite(L"ERROR: Invalid arguments - must provide -Script parameter");
+        CloseLog();
         // MULTI-LINE STRING LITERAL: Using L"" for wide strings
         MessageBoxW(NULL,
             L"PS-Launcher Usage:\n\n"
@@ -241,6 +369,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
         LocalFree(args);
         return 1;
     }
+    
+    LogFormat(L"Script file: %s", args[2]);
 
     //----------------------------------------------------------------------
     // PATH CONSTRUCTION - String manipulation and validation
@@ -294,9 +424,13 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     // FILE VALIDATION - File system operations
     //----------------------------------------------------------------------
     // WINDOWS API: Check if file exists (returns INVALID_FILE_ATTRIBUTES if not found)
+    LogFormat(L"PowerShell path: %s", psPath);
+    
     if (GetFileAttributesW(psPath) == INVALID_FILE_ATTRIBUTES)
     {
+        LogWrite(L"ERROR: PowerShell executable not found");
         LocalFree(args);
+        CloseLog();
         ShowError(L"PowerShell executable not found.", L"Error");
         return 1;
     }
@@ -304,7 +438,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     // ARRAY INDEXING: args[2] is the script path parameter
     if (GetFileAttributesW(args[2]) == INVALID_FILE_ATTRIBUTES)
     {
+        LogWrite(L"ERROR: Script file not found");
         LocalFree(args);
+        CloseLog();
         ShowError(L"Specified script file not found.", L"Error");
         return 1;
     }
@@ -396,6 +532,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     //----------------------------------------------------------------------
     // PARAMETER PROCESSING - Loop constructs and security filtering
     //----------------------------------------------------------------------
+    LogWrite(L"Processing script parameters...");
+    
     // FOR LOOP: C-style loop with initialization, condition, increment
     for (int i = 3; i < argc; i++)
     {
@@ -406,7 +544,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
             // SECURITY CHECK: Prevent command injection
             if (args[i][j] == L';')
             {
+                LogWrite(L"ERROR: Semicolon detected in parameter (security block)");
                 LocalFree(args);
+                CloseLog();
                 // Silent failure - return exit code 1 for semicolon injection attempts
                 return 1;
             }
@@ -488,6 +628,10 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
 
     // MEMORY CLEANUP: Free dynamically allocated command line array
     LocalFree(args);
+    
+    LogWrite(L"Final command line:");
+    LogWrite(cmd);
+    LogWrite(L"Creating PowerShell process...");
 
     //----------------------------------------------------------------------
     // PROCESS CREATION - Windows API structures and process management
@@ -506,6 +650,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     if (!CreateProcessW(NULL, cmd, NULL, NULL, FALSE,
                           CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
     {
+        LogWrite(L"ERROR: Failed to create PowerShell process");
         // ERROR HANDLING: Get detailed error information
         DWORD err = GetLastError();  // WINDOWS ERROR CODE: System error number
         
@@ -532,6 +677,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     //----------------------------------------------------------------------
     // PROCESS SYNCHRONIZATION - Wait for completion and get exit code
     //----------------------------------------------------------------------
+    LogWrite(L"Process created successfully");
+    LogWrite(L"Waiting for script execution to complete...");
+    
     // WINDOWS API: Block until process completes
     WaitForSingleObject(pi.hProcess, INFINITE);
     
@@ -539,9 +687,28 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     DWORD exitCode = 0;  // INITIALIZATION: Default to success
     GetExitCodeProcess(pi.hProcess, &exitCode);
     
+    // Log completion with exit code
+    WCHAR exitMsg[100];
+    size_t exitPos = 0;
+    AppendStr(exitMsg, 100, L"Script completed with exit code: ", &exitPos);
+    // Simple exit code conversion (handles 0-99)
+    if (exitCode < 10) {
+        WCHAR code[2] = { L'0' + (WCHAR)exitCode, L'\0' };
+        AppendStr(exitMsg, 100, code, &exitPos);
+    } else {
+        WCHAR code[3] = { L'0' + (WCHAR)(exitCode / 10), L'0' + (WCHAR)(exitCode % 10), L'\0' };
+        AppendStr(exitMsg, 100, code, &exitPos);
+    }
+    LogWrite(exitMsg);
+    LogWrite(L"========================================");
+    LogWrite(L"Execution completed successfully");
+    LogWrite(L"========================================");
+    
     // HANDLE CLEANUP: Always close handles to prevent resource leaks
     CloseHandle(pi.hProcess);   // PROCESS HANDLE: Main process
     CloseHandle(pi.hThread);    // THREAD HANDLE: Primary thread
+    
+    CloseLog();
     
     // RETURN: Pass through PowerShell's exit code to caller
     return exitCode;
