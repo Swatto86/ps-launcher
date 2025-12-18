@@ -8,9 +8,9 @@
 #define VER_PRODUCTVERSION_STR      "1.0.0\0"
 
 #define VER_COMPANYNAME_STR         "swatto.co.uk"
-#define VER_FILEDESCRIPTION_STR     "Minimal native launcher for PowerShell scripts without CRT dependencies"
+#define VER_FILEDESCRIPTION_STR     "PowerShell script launcher preventing console windows in user-context scheduled tasks"
 #define VER_INTERNALNAME_STR        "ps-launcher"
-#define VER_LEGALCOPYRIGHT_STR      "Copyright © 2025 Steve Watson (swatto.co.uk)"
+#define VER_LEGALCOPYRIGHT_STR      "Copyright (C) 2025 Steve Watson"
 #define VER_ORIGINALFILENAME_STR    "ps-launcher.exe"
 #define VER_PRODUCTNAME_STR         "PS-Launcher"
 
@@ -37,7 +37,7 @@ BEGIN
             VALUE "ProductName",      VER_PRODUCTNAME_STR
             VALUE "ProductVersion",   VER_PRODUCTVERSION_STR
             VALUE "Author",           "Steve Watson"
-            VALUE "BuildDate",        __DATE__ " " __TIME__
+            VALUE "BuildDate",        "December 2025"
         END
     END
     BLOCK "VarFileInfo"
