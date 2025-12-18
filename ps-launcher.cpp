@@ -153,19 +153,6 @@ static inline bool AppendStr(WCHAR* dest, size_t destSize, const WCHAR* src, siz
 //--------------------------------------------------------------------------
 // HELPER FUNCTIONS - String processing utilities
 //--------------------------------------------------------------------------
-// Check if a string contains spaces, quotes, or special characters that need quoting
-static inline bool NeedsQuoting(const WCHAR* str)
-{
-    if (!str || str[0] == L'\0') return true;  // Empty strings always need quotes
-    
-    for (size_t i = 0; str[i] != L'\0'; i++)
-    {
-        if (str[i] == L' ' || str[i] == L'\t' || str[i] == L'"')
-            return true;
-    }
-    return false;
-}
-
 // Escape internal quotes in a string by doubling them for PowerShell
 // Returns false if buffer overflow would occur
 static inline bool AppendEscaped(WCHAR* dest, size_t destSize, const WCHAR* src, size_t* curLen)
@@ -251,6 +238,8 @@ static void LogWrite(const WCHAR* message)
         utf8Buffer[utf8Len + 1] = '\0';
         
         DWORD written;
+        // WriteFile return value intentionally not checked - logging is best-effort
+        // If logging fails, we continue execution rather than failing the entire operation
         WriteFile(g_hLogFile, utf8Buffer, utf8Len + 1, &written, NULL);
     }
 }
@@ -555,8 +544,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
         // ADD SPACE SEPARATOR
         if (!AppendStr(cmd, CMD_BUFFER_SIZE, L" ", &pos))
         {
+            LogWrite(L"ERROR: Buffer overflow while adding parameter separator");
             LocalFree(args);
-            // Silent failure - buffer overflow
+            CloseLog();
             return 1;
         }
         
@@ -688,17 +678,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
     GetExitCodeProcess(pi.hProcess, &exitCode);
     
     // Log completion with exit code
+    // Use wsprintfW to properly handle any exit code value (not just 0-99)
     WCHAR exitMsg[100];
-    size_t exitPos = 0;
-    AppendStr(exitMsg, 100, L"Script completed with exit code: ", &exitPos);
-    // Simple exit code conversion (handles 0-99)
-    if (exitCode < 10) {
-        WCHAR code[2] = { L'0' + (WCHAR)exitCode, L'\0' };
-        AppendStr(exitMsg, 100, code, &exitPos);
-    } else {
-        WCHAR code[3] = { L'0' + (WCHAR)(exitCode / 10), L'0' + (WCHAR)(exitCode % 10), L'\0' };
-        AppendStr(exitMsg, 100, code, &exitPos);
-    }
+    wsprintfW(exitMsg, L"Script completed with exit code: %u", exitCode);
     LogWrite(exitMsg);
     LogWrite(L"========================================");
     LogWrite(L"Execution completed successfully");

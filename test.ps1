@@ -174,6 +174,15 @@ $logPath = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "test.log
 "ExitCode: $ExitCode" | Out-File $logPath -Encoding UTF8 -Force
 exit $ExitCode
 '@
+
+    'quoteescape' = @'
+# Script that receives parameters with internal quotes
+[CmdletBinding()]
+param([string]$QuotedText, [string]$Message)
+$logPath = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "test.log"
+"QuotedText: $QuotedText, Message: $Message" | Out-File $logPath -Encoding UTF8 -Force
+exit 0
+'@
 }
 
 # Create test script files
@@ -254,6 +263,13 @@ Write-TestCase "Parameters with spaces"
 $result = Invoke-PSLauncher "-Script `"test-basic.ps1`" -Name `"John Doe`" -Value `"Multiple Words Here`""
 Assert-ExitCode -Expected 0 -Actual $result.ExitCode -TestName "Parameters with spaces"
 Assert-LogContains -ExpectedContent "Name: John Doe" -TestName "Spaces in parameters"
+
+# Test 12: Parameters with internal quotes (AppendEscaped function test)
+Write-TestCase "Parameters with internal quotes (AppendEscaped)"
+$result = Invoke-PSLauncher "-Script `"test-quoteescape.ps1`" -QuotedText `"He said \`"hello\`" there`" -Message `"It's working`""
+Assert-ExitCode -Expected 0 -Actual $result.ExitCode -TestName "Internal quotes"
+Assert-LogContains -ExpectedContent 'QuotedText: He said "hello" there' -TestName "Quote escaping in log"
+Assert-LogContains -ExpectedContent "Message: It's working" -TestName "Apostrophe handling"
 
 #endregion
 
