@@ -1,7 +1,7 @@
 //--------------------------------------------------------------------------
-// C/C++ LANGUAGE FEATURES DEMONSTRATION
+// C LANGUAGE FEATURES DEMONSTRATION
 //--------------------------------------------------------------------------
-// This code demonstrates several important C/C++ concepts:
+// This code demonstrates several important C concepts:
 // - Manual memory management without CRT
 // - Function pointers and Windows API usage
 // - String manipulation in wide character format
@@ -14,6 +14,11 @@
 #include <windows.h>         // HEADERS: Core Windows API types and functions
 #include <shellapi.h>        // HEADERS: Shell API for command line parsing
 #include <shlobj.h>          // HEADERS: Shell folder API for AppData path
+
+// Pure C boolean type definitions (C doesn't have native bool)
+#define bool int
+#define true 1
+#define false 0
 
 // Buffer size for command line - kept small to avoid stack overflow without CRT
 // This is sufficient for most PowerShell scripts with reasonable parameters
@@ -36,10 +41,10 @@
 //--------------------------------------------------------------------------
 // MANUAL CRT REPLACEMENT - Low-level memory operations
 //--------------------------------------------------------------------------
-// FUNCTION LINKAGE: extern "C" prevents C++ name mangling, __cdecl specifies calling convention
+// FUNCTION LINKAGE: __cdecl specifies calling convention (standard C convention)
 // POINTER ARITHMETIC: Direct memory manipulation using unsigned char pointers
 // MEMORY SAFETY: Manual bounds checking to prevent buffer overflows
-extern "C" void* __cdecl memset(void* dest, int c, size_t count)
+void* __cdecl memset(void* dest, int c, size_t count)
 {
     // CAST: void* to unsigned char* for byte-level access
     unsigned char* p = (unsigned char*)dest;
@@ -729,12 +734,12 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nCmdSh
 6. CODE ORGANIZATION:
    - Split into multiple functions for better maintainability
    - Add unit tests for string manipulation functions
-   - Implement RAII pattern for resource management
+   - Use consistent error handling patterns
 
-7. MODERN C++ FEATURES (if C++ is acceptable):
-   - Use std::wstring for string operations
-   - Implement RAII with smart pointers
-   - Add exception safety guarantees
+7. MODERN C FEATURES (C99/C11):
+   - Use designated initializers for struct initialization
+   - Add _Static_assert for compile-time checks
+   - Consider restrict keyword for performance hints
 
 8. CROSS-PLATFORM CONSIDERATIONS:
    - Abstract Windows-specific code behind interfaces

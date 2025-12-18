@@ -15,6 +15,7 @@ When running PowerShell scripts via Task Scheduler, shortcuts, or automation too
 - Executing under the current user's security context (not SYSTEM)
 - Supporting all script parameters and exit codes
 - Maintaining full PowerShell functionality while being invisible to users
+- Written in pure C for maximum portability and minimal dependencies
 
 This is particularly useful for:
 - Task Scheduler tasks that run while users are logged in
@@ -138,7 +139,7 @@ Or manually:
 
 ```cmd
 call "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
-cl /c /GS- /O1 /Os /GR- ps-launcher.cpp
+cl /c /GS- /O1 /Os ps-launcher.c
 link /NODEFAULTLIB /ENTRY:WinMain /SUBSYSTEM:WINDOWS kernel32.lib user32.lib shell32.lib /OUT:ps-launcher.exe ps-launcher.obj
 del *.obj
 ```
@@ -172,6 +173,8 @@ del *.obj
 
 ## Technical Details
 
+**Language**: Pure C (C89/C90 compatible) - no C++ features used
+
 ### Why So Small?
 
 The executable achieves its minimal size through several techniques:
@@ -180,6 +183,7 @@ The executable achieves its minimal size through several techniques:
 2. **Minimal Windows Headers** - Uses `WIN32_LEAN_AND_MEAN`
 3. **Fixed Buffer Allocation** - No dynamic memory allocation
 4. **Aggressive Compiler Optimization** - Size-focused compilation flags
+5. **Pure C Implementation** - No C++ runtime overhead
 
 ### Memory Management
 
